@@ -2,6 +2,7 @@
 #define CHATSERVICE_H
 
 #include<muduo/net/TcpConnection.h>
+#include <muduo/base/Timestamp.h>
 #include<unordered_map>
 #include<functional>
 #include"json.hpp"
@@ -52,6 +53,12 @@ public:
     //处理注销业务
     void loginout(const TcpConnectionPtr &conn,json &js, Timestamp time);
 
+    // 心跳处理
+    void heartBeat(const TcpConnectionPtr &conn, json &js, Timestamp time);
+
+    // 心跳超时检测定时器（每隔 5 秒检查一次）
+    void checkHeartBeatTimeout();
+
     //服务器异常，业务重置方法
     void reset();
     
@@ -63,8 +70,15 @@ public:
 
     //从redis消息队列中获取订阅的消息
     void handleRedisSubscribeMessage(int,string);
+
+
 private:
     ChatService();
+
+
+    // 存储每个连接最后一次心跳时间
+    std::unordered_map<muduo::net::TcpConnectionPtr, muduo::Timestamp> _connLastHeartBeat;
+    mutex _heartBeatMutex;
 
     //存储消息id和其对应的业务处理方法
     unordered_map<int,MsgHandler> _msgHandlerMap;

@@ -1,17 +1,19 @@
 #include "offlinemessagemodel.hpp"
-#include "db.h"
-
+//#include "db.h"
+#include "server/db/Connection.h"
+#include "server/db/CommonConnectionPool.h"
 // 存储用户的离线消息
 void OfflineMsgModel::insert(int userid, string msg)
 {
     //组装sql语句
     char sql[1024] = {0};
     sprintf(sql,"insert into offlinemessage values('%d','%s')",userid,msg.c_str());
-    
-    MySQL mysql;
-    if(mysql.connect())
+
+
+    auto conn = ConnectionPool::getConnectionPool()->getConnection();
+    if(conn != nullptr)
     {
-        mysql.update(sql);
+        conn->update(sql);
     }
 
 }
@@ -23,10 +25,11 @@ void OfflineMsgModel::remove(int userid)
     char sql[1024] = {0};
     sprintf(sql,"delete from offlinemessage where userid=%d",userid);
     
-    MySQL mysql;
-    if(mysql.connect())
+
+    auto conn = ConnectionPool::getConnectionPool()->getConnection();
+    if(conn != nullptr)
     {
-        mysql.update(sql);
+        conn->update(sql);
     }
 }
 
@@ -37,11 +40,12 @@ vector<string> OfflineMsgModel::query(int userid)
     char sql[1024] = {0};
     sprintf(sql,"select message from offlinemessage where userid = %d",userid);
     
+    
     vector<string> vec;
-    MySQL mysql;
-    if(mysql.connect())
+    auto conn = ConnectionPool::getConnectionPool()->getConnection();
+    if(conn != nullptr)
     {
-        MYSQL_RES *res = mysql.query(sql);
+        MYSQL_RES *res = conn->query(sql);
         if(res != nullptr)
         {
            
@@ -55,9 +59,7 @@ vector<string> OfflineMsgModel::query(int userid)
 
            mysql_free_result(res);
            return vec;
-           
-        }
-        
+    }
     }
     return vec;
     

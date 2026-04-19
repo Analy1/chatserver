@@ -59,7 +59,7 @@ MYSQL_RES *MySQL::query(string sql)
 }
 
 // 获取连接
-MYSQL* MySQL::getConnection()
+MYSQL *MySQL::getConnection()
 {
     return _conn;
 }

@@ -25,6 +25,7 @@ ChatServer::ChatServer(EventLoop *loop,
 void ChatServer::start()
 {
     _server.start();
+
 }
 
 // 上报连接相关信息的回调函数
@@ -43,7 +44,7 @@ void ChatServer::onMessage(const TcpConnectionPtr &conn,
                            Buffer *buffer,
                            Timestamp time)
 {
-    string buf = buffer->retrieveAllAsString();
+    string buf = buffer->retrieveAllAsString();//把缓冲区的消息转成字符串
 
     //数据的反序列化
     json js = json::parse(buf);

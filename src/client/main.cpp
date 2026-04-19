@@ -37,6 +37,10 @@ sem_t rwsem;
 // 记录登录状态
 atomic_bool g_isLoginSuccess{false};
 
+//心跳线程
+void startHeartBeatTask(int clientfd, int userid);
+
+
 
 // 接收线程
 void readTaskHandler(int clientfd);
@@ -50,6 +54,7 @@ void showCurrentUserData();
 // 聊天客户端程序实现，main线程用作发送线程，子线程用作接收线程
 int main(int argc, char **argv)
 {
+    
     if (argc < 3)
     {
         cerr << "command invalid! example: ./ChatClient 127.0.0.1 6000" << endl;
@@ -137,7 +142,10 @@ int main(int argc, char **argv)
             {
                 // 进入聊天主菜单页面
                 isMainMenuRunning = true;
+                startHeartBeatTask(clientfd,id);//启动心跳线程
                 mainMenu(clientfd);
+
+                
             }
         }
         break;
@@ -327,6 +335,28 @@ void readTaskHandler(int clientfd)
             continue;
         }
     }
+}
+
+
+//心跳函数
+void startHeartBeatTask(int clientfd, int userid)
+{
+    // 后台线程发心跳
+    thread heartThread([=]() {
+        while (true)
+        {
+            json js;
+            js["msgid"] = HEART_BEAT_MSG;
+            js["id"] = userid;
+
+            string msg = js.dump();
+            send(clientfd, msg.c_str(), msg.length(), 0);
+
+            sleep(5); // 5秒一次
+        }
+    });
+
+    heartThread.detach(); // 后台运行
 }
 
 // 显示当前登录成功用户的基本信息
