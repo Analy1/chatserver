@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include "Logger.hpp"
 
 using namespace muduo;
 using namespace std;
@@ -53,6 +54,7 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
         if (user.getState() == "online")
         {
             // 该用户已经登陆，不允许重复登陆
+            LOG_WARN << "User " << id << " already online, reject duplicate login";
             json response;
             response["msgid"] = LOGIN_MSG_ACK;
             response["errno"] = 2;
@@ -65,6 +67,8 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
             {
                 lock_guard<mutex> lock(_connMutex);
                 _userConnMap.insert({id, conn});
+
+                LOG_INFO << "User " << id << " (" << user.getName() << ") login success";
             }
 
             // id用户登陆成功后，向redis订阅channel(id)
@@ -87,6 +91,8 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
                 response["offlinemsg"] = vec;
                 // 读取该用户的离线消息后，把该用户的所有离线消息删除掉
                 _offlineMsgModel.remove(id);
+
+                LOG_DEBUG << "User " << id << " received " << vec.size() << " offline messages";
             }
 
             // 查询该用户的好友信息并返回
@@ -139,6 +145,8 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
     else
     {
         // 该用户不存在，用户存在但是密码错误，登陆失败
+        LOG_WARN << "Login failed for user " << id << ": invalid credentials";
+
         json response;
         response["msgid"] = LOGIN_MSG_ACK;
         response["errno"] = 1;
@@ -160,6 +168,8 @@ void ChatService::reg(const TcpConnectionPtr &conn, json &js, Timestamp time)
     if (state)
     {
         // 注册成功
+        LOG_INFO << "User " << name << " registered successfully, id=" << user.getId();
+
         json response;
         response["msgid"] = REG_MSG_ACK;
         response["errno"] = 0;
@@ -169,6 +179,8 @@ void ChatService::reg(const TcpConnectionPtr &conn, json &js, Timestamp time)
     else
     {
         // 注册失败
+        LOG_ERROR << "User " << name << " registration failed";
+
         json response;
         response["msgid"] = REG_MSG_ACK;
         response["errno"] = 1;
@@ -181,6 +193,7 @@ void ChatService::reset()
 {
     // 把online状态的用户，设置成offline
     _userModel.resetState();
+    LOG_INFO << "Server reset: all users set to offline";
 }
 
 // 获取消息对应的处理器
@@ -223,6 +236,8 @@ void ChatService::loginout(const TcpConnectionPtr &conn, json &js, Timestamp tim
     User user(userid, "", "", "offline");
     user.setState("offline");
     _userModel.updateState(user);
+
+    LOG_INFO << "User " << userid << " logout";
 }
 
 // 处理客户端异常退出
@@ -251,7 +266,7 @@ void ChatService::clientCloseException(const TcpConnectionPtr &conn)
     {
         user.setState("offline");
         _userModel.updateState(user);
-        // LOG_INFO << "用户 " << user.getId() << " 已设置为 offline";
+        LOG_INFO << "User " << user.getId() << " disconnected abnormally, set to offline";
     }
 
     {
@@ -282,11 +297,13 @@ void ChatService::oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time
     if (user.getState() == "online")
     {
         _redis.publish(toid, js.dump());
+        LOG_DEBUG << "Message forwarded via Redis to user " << toid;
         return;
     }
 
     // toid不在线，存储离线消息
     _offlineMsgModel.insert(toid, js.dump());
+    LOG_DEBUG << "User " << toid << " offline, message saved";
 }
 
 // 添加好友业务  msgid id  friendid
@@ -297,6 +314,7 @@ void ChatService::addFriend(const TcpConnectionPtr &conn, json &js, Timestamp ti
 
     // 存储好友信息
     _friendModel.insert(userid, friendid);
+    LOG_INFO << "User " << userid << " added friend " << friendid;
 }
 
 // 创建群组业务
@@ -312,6 +330,7 @@ void ChatService::createGroup(const TcpConnectionPtr &conn, json &js, Timestamp 
     {
         // 存储群组创建人信息
         _groupModel.addGroup(userid, group.getId(), "creator");
+        LOG_INFO << "Group '" << name << "' created by user " << userid;
     }
 }
 
@@ -321,6 +340,7 @@ void ChatService::addGroup(const TcpConnectionPtr &conn, json &js, Timestamp tim
     int userid = js["id"].get<int>();
     int groupid = js["groupid"].get<int>();
     _groupModel.addGroup(userid, groupid, "normal");
+    LOG_INFO << "User " << userid << " joined group " << groupid;
 }
 
 // 群组聊天业务
@@ -353,11 +373,13 @@ void ChatService::groupChat(const TcpConnectionPtr &conn, json &js, Timestamp ti
             }
         }
     }
+    LOG_DEBUG << "Group chat: user " << userid << " sent message to group " << groupid;
 }
 
 // 从redis消息队列中获取订阅的消息
 void ChatService::handleRedisSubscribeMessage(int userid, string msg)
 {
+    LOG_DEBUG << "Redis message received for user " << userid;
     lock_guard<mutex> lock(_connMutex);
     auto it = _userConnMap.find(userid);
     if (it != _userConnMap.end())
@@ -380,41 +402,43 @@ void ChatService::heartBeat(const TcpConnectionPtr &conn, json &js, Timestamp ti
         lock_guard<mutex> lock(_heartBeatMutex);
         // 2. 更新该连接的最后心跳时间
         _connLastHeartBeat[conn] = time.now();
-        cout << ">>> 心跳已保存！当前map大小：" << _connLastHeartBeat.size() << endl;
+        //cout << ">>> 心跳已保存！当前map大小：" << _connLastHeartBeat.size() << endl;
     }
 
-    std::cout << ">> 收到用户【" << userid << "】的心跳包" << endl;
+    // std::cout << ">> 收到用户【" << userid << "】的心跳包" << endl;
+    LOG_DEBUG << "Heartbeat from user " << userid;
 }
 
 // 检查心跳超时
 void ChatService::checkHeartBeatTimeout()
 {
-    Timestamp now = Timestamp::now(); 
+    Timestamp now = Timestamp::now();
     vector<TcpConnectionPtr> needClose;
 
     {
-        lock_guard<mutex> lock(_heartBeatMutex);  //加锁
-        
+        lock_guard<mutex> lock(_heartBeatMutex); // 加锁
+
         // 先收集，后删除
-        for (auto& pair : _connLastHeartBeat)
+        for (auto &pair : _connLastHeartBeat)
         {
             if (timeDifference(now, pair.second) > 10.0)
             {
                 needClose.push_back(pair.first);
             }
         }
-        
+
         // 在锁内删除超时的连接
-        for (auto& conn : needClose)
+        for (auto &conn : needClose)
         {
             _connLastHeartBeat.erase(conn);
         }
-    }  // 锁在这里释放
+    } // 锁在这里释放
 
     // 在锁外断开连接（避免死锁）
-    for (auto& conn : needClose)
+    for (auto &conn : needClose)
     {
-        cout << ">> 心跳超时，断开无效连接" << endl;
-        clientCloseException(conn);  // clientCloseException 内部会自己加锁
+        // cout << ">> 心跳超时，断开无效连接" << endl;
+        LOG_INFO << "Heartbeat timeout, closing connection";
+        clientCloseException(conn); // clientCloseException 内部会自己加锁
     }
 }

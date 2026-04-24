@@ -1,8 +1,9 @@
 #include "chatserver.hpp"
 #include "chatservice.hpp"
-#include"json.hpp"
+#include "json.hpp"
+#include "Logger.hpp"
 #include <functional>
-#include<string>
+#include <string>
 using namespace std;
 using namespace placeholders;
 using json = nlohmann::json;
@@ -25,15 +26,21 @@ ChatServer::ChatServer(EventLoop *loop,
 void ChatServer::start()
 {
     _server.start();
-
+    LOG_INFO << "ChatServer started, listening on " // ★
+             << _server.ipPort();
 }
 
 // 上报连接相关信息的回调函数
 void ChatServer::onConnection(const TcpConnectionPtr &conn)
 {
-    //客户端断开连接
-    if(!conn->connected())
+    if (conn->connected())
     {
+        LOG_INFO << "New connection: " << conn->peerAddress().toIpPort();
+    }
+    // 客户端断开连接
+    else
+    {
+        LOG_INFO << "Connection closed: " << conn->peerAddress().toIpPort();
         ChatService::instance()->clientCloseException(conn);
         conn->shutdown();
     }
@@ -44,14 +51,14 @@ void ChatServer::onMessage(const TcpConnectionPtr &conn,
                            Buffer *buffer,
                            Timestamp time)
 {
-    string buf = buffer->retrieveAllAsString();//把缓冲区的消息转成字符串
+    string buf = buffer->retrieveAllAsString(); // 把缓冲区的消息转成字符串
 
-    //数据的反序列化
+    // 数据的反序列化
     json js = json::parse(buf);
 
-    //目的：完全解耦网络模块的代码和业务模块的代码
-    //通过js["msgid"]来获取 业务handler 
+    // 目的：完全解耦网络模块的代码和业务模块的代码
+    // 通过js["msgid"]来获取 业务handler
     auto msgHandler = ChatService::instance()->getHandler(js["msgid"].get<int>());
-    //回调消息绑定好的事件处理器，来执行相应的业务处理
-    msgHandler(conn,js,time);
+    // 回调消息绑定好的事件处理器，来执行相应的业务处理
+    msgHandler(conn, js, time);
 }
