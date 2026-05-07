@@ -4,6 +4,10 @@
 /*
 server和client的公共文件
 */
+
+// 消息长度头字节数（4字节，网络字节序 → 解决TCP粘包）
+const int kHeaderLen = 4;
+
 enum EnMsgType
 {
     LOGIN_MSG = 1, // 登录消息

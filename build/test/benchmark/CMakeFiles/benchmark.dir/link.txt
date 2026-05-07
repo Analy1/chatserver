@@ -1,0 +1,1 @@
+/usr/bin/g++ -g -g -rdynamic CMakeFiles/benchmark.dir/benchmark.cpp.o -o /home/stu/project/chatserver/bin/benchmark  -lpthread 

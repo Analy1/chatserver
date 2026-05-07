@@ -1,0 +1,128 @@
+[
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/chatserver.cpp.o -c /home/stu/project/chatserver/src/server/chatserver.cpp",
+  "file": "/home/stu/project/chatserver/src/server/chatserver.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/chatserver.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/chatservice.cpp.o -c /home/stu/project/chatserver/src/server/chatservice.cpp",
+  "file": "/home/stu/project/chatserver/src/server/chatservice.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/chatservice.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/main.cpp.o -c /home/stu/project/chatserver/src/server/main.cpp",
+  "file": "/home/stu/project/chatserver/src/server/main.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/main.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/db/CommonConnectionPool.cpp.o -c /home/stu/project/chatserver/src/server/db/CommonConnectionPool.cpp",
+  "file": "/home/stu/project/chatserver/src/server/db/CommonConnectionPool.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/db/CommonConnectionPool.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/db/Connection.cpp.o -c /home/stu/project/chatserver/src/server/db/Connection.cpp",
+  "file": "/home/stu/project/chatserver/src/server/db/Connection.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/db/Connection.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/db/db.cpp.o -c /home/stu/project/chatserver/src/server/db/db.cpp",
+  "file": "/home/stu/project/chatserver/src/server/db/db.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/db/db.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/model/friendmodel.cpp.o -c /home/stu/project/chatserver/src/server/model/friendmodel.cpp",
+  "file": "/home/stu/project/chatserver/src/server/model/friendmodel.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/model/friendmodel.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/model/groupmodel.cpp.o -c /home/stu/project/chatserver/src/server/model/groupmodel.cpp",
+  "file": "/home/stu/project/chatserver/src/server/model/groupmodel.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/model/groupmodel.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/model/offlinemessagemodel.cpp.o -c /home/stu/project/chatserver/src/server/model/offlinemessagemodel.cpp",
+  "file": "/home/stu/project/chatserver/src/server/model/offlinemessagemodel.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/model/offlinemessagemodel.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/model/usermodel.cpp.o -c /home/stu/project/chatserver/src/server/model/usermodel.cpp",
+  "file": "/home/stu/project/chatserver/src/server/model/usermodel.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/model/usermodel.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/redis/redis.cpp.o -c /home/stu/project/chatserver/src/server/redis/redis.cpp",
+  "file": "/home/stu/project/chatserver/src/server/redis/redis.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/redis/redis.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/__/asynlog/AppendFile.cpp.o -c /home/stu/project/chatserver/src/asynlog/AppendFile.cpp",
+  "file": "/home/stu/project/chatserver/src/asynlog/AppendFile.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/__/asynlog/AppendFile.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/__/asynlog/AsynLogging.cpp.o -c /home/stu/project/chatserver/src/asynlog/AsynLogging.cpp",
+  "file": "/home/stu/project/chatserver/src/asynlog/AsynLogging.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/__/asynlog/AsynLogging.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/__/asynlog/CountDownLatch.cpp.o -c /home/stu/project/chatserver/src/asynlog/CountDownLatch.cpp",
+  "file": "/home/stu/project/chatserver/src/asynlog/CountDownLatch.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/__/asynlog/CountDownLatch.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/__/asynlog/LogFile.cpp.o -c /home/stu/project/chatserver/src/asynlog/LogFile.cpp",
+  "file": "/home/stu/project/chatserver/src/asynlog/LogFile.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/__/asynlog/LogFile.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/__/asynlog/LogMessage.cpp.o -c /home/stu/project/chatserver/src/asynlog/LogMessage.cpp",
+  "file": "/home/stu/project/chatserver/src/asynlog/LogMessage.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/__/asynlog/LogMessage.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/__/asynlog/Logger.cpp.o -c /home/stu/project/chatserver/src/asynlog/Logger.cpp",
+  "file": "/home/stu/project/chatserver/src/asynlog/Logger.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/__/asynlog/Logger.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/server",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatServer.dir/__/asynlog/Timestamp.cpp.o -c /home/stu/project/chatserver/src/asynlog/Timestamp.cpp",
+  "file": "/home/stu/project/chatserver/src/asynlog/Timestamp.cpp",
+  "output": "src/server/CMakeFiles/ChatServer.dir/__/asynlog/Timestamp.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/src/client",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/ChatClient.dir/main.cpp.o -c /home/stu/project/chatserver/src/client/main.cpp",
+  "file": "/home/stu/project/chatserver/src/client/main.cpp",
+  "output": "src/client/CMakeFiles/ChatClient.dir/main.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/test/test_protocol",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/test_protocol.dir/test_protocol.cpp.o -c /home/stu/project/chatserver/test/test_protocol/test_protocol.cpp",
+  "file": "/home/stu/project/chatserver/test/test_protocol/test_protocol.cpp",
+  "output": "test/test_protocol/CMakeFiles/test_protocol.dir/test_protocol.cpp.o"
+},
+{
+  "directory": "/home/stu/project/chatserver/build/test/benchmark",
+  "command": "/usr/bin/g++  -I/home/stu/project/chatserver/include -I/home/stu/project/chatserver/include/server -I/home/stu/project/chatserver/include/server/db -I/home/stu/project/chatserver/include/server/model -I/home/stu/project/chatserver/include/server/redis -I/home/stu/project/chatserver/thirdparty -I/home/stu/project/chatserver/include/asynlog -g -g -o CMakeFiles/benchmark.dir/benchmark.cpp.o -c /home/stu/project/chatserver/test/benchmark/benchmark.cpp",
+  "file": "/home/stu/project/chatserver/test/benchmark/benchmark.cpp",
+  "output": "test/benchmark/CMakeFiles/benchmark.dir/benchmark.cpp.o"
+}
+]

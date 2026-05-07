@@ -5,10 +5,20 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <arpa/inet.h>   // htonl
 #include "Logger.hpp"
 
 using namespace muduo;
 using namespace std;
+
+// 辅助函数：给 conn->send 加上 4 字节长度头（解决粘包）
+static void sendMsg(const TcpConnectionPtr &conn, const string &msg)
+{
+    uint32_t be_len = htonl(static_cast<uint32_t>(msg.size()));
+    string frame(reinterpret_cast<const char *>(&be_len), sizeof(be_len));
+    frame += msg;
+    conn->send(frame);
+}
 
 // 获取单例对象的接口函数
 ChatService *ChatService::instance()
@@ -59,7 +69,7 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
             response["msgid"] = LOGIN_MSG_ACK;
             response["errno"] = 2;
             response["errmsg"] = "this account is using,input another!";
-            conn->send(response.dump());
+            sendMsg(conn, response.dump());
         }
         else
         {
@@ -139,7 +149,7 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
                 response["groups"] = groupV;
             }
 
-            conn->send(response.dump());
+            sendMsg(conn, response.dump());
         }
     }
     else
@@ -151,7 +161,7 @@ void ChatService::login(const TcpConnectionPtr &conn, json &js, Timestamp time)
         response["msgid"] = LOGIN_MSG_ACK;
         response["errno"] = 1;
         response["errmsg"] = "id or password is invalid!";
-        conn->send(response.dump());
+        sendMsg(conn, response.dump());
     }
 }
 
@@ -174,7 +184,7 @@ void ChatService::reg(const TcpConnectionPtr &conn, json &js, Timestamp time)
         response["msgid"] = REG_MSG_ACK;
         response["errno"] = 0;
         response["id"] = user.getId();
-        conn->send(response.dump());
+        sendMsg(conn, response.dump());
     }
     else
     {
@@ -184,7 +194,7 @@ void ChatService::reg(const TcpConnectionPtr &conn, json &js, Timestamp time)
         json response;
         response["msgid"] = REG_MSG_ACK;
         response["errno"] = 1;
-        conn->send(response.dump());
+        sendMsg(conn, response.dump());
     }
 }
 
@@ -287,7 +297,7 @@ void ChatService::oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time
         if (it != _userConnMap.end())
         {
             // toid在线,转发消息   服务器主动推送消息给toid用户
-            it->second->send(js.dump());
+            sendMsg(it->second, js.dump());
             return;
         }
     }
@@ -357,7 +367,7 @@ void ChatService::groupChat(const TcpConnectionPtr &conn, json &js, Timestamp ti
         if (it != _userConnMap.end())
         {
             // 转发消息
-            it->second->send(js.dump());
+            sendMsg(it->second, js.dump());
         }
         else
         {
@@ -384,7 +394,7 @@ void ChatService::handleRedisSubscribeMessage(int userid, string msg)
     auto it = _userConnMap.find(userid);
     if (it != _userConnMap.end())
     {
-        it->second->send(msg);
+        sendMsg(it->second, msg);
         return;
     }
 

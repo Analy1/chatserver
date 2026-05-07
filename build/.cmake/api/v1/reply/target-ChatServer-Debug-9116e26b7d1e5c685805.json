@@ -2,7 +2,7 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "/home/stu/tulun/chatserver/bin/ChatServer"
+			"path" : "/home/stu/project/chatserver/bin/ChatServer"
 		}
 	],
 	"backtrace" : 1,
@@ -89,38 +89,38 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "-g"
+					"fragment" : "-g -g"
 				}
 			],
 			"includes" : 
 			[
 				{
 					"backtrace" : 4,
-					"path" : "/home/stu/tulun/chatserver/include"
+					"path" : "/home/stu/project/chatserver/include"
 				},
 				{
 					"backtrace" : 5,
-					"path" : "/home/stu/tulun/chatserver/include/server"
+					"path" : "/home/stu/project/chatserver/include/server"
 				},
 				{
 					"backtrace" : 6,
-					"path" : "/home/stu/tulun/chatserver/include/server/db"
+					"path" : "/home/stu/project/chatserver/include/server/db"
 				},
 				{
 					"backtrace" : 7,
-					"path" : "/home/stu/tulun/chatserver/include/server/model"
+					"path" : "/home/stu/project/chatserver/include/server/model"
 				},
 				{
 					"backtrace" : 8,
-					"path" : "/home/stu/tulun/chatserver/include/server/redis"
+					"path" : "/home/stu/project/chatserver/include/server/redis"
 				},
 				{
 					"backtrace" : 9,
-					"path" : "/home/stu/tulun/chatserver/thirdparty"
+					"path" : "/home/stu/project/chatserver/thirdparty"
 				},
 				{
 					"backtrace" : 10,
-					"path" : "/home/stu/tulun/chatserver/include/asynlog"
+					"path" : "/home/stu/project/chatserver/include/asynlog"
 				}
 			],
 			"language" : "CXX",
@@ -153,7 +153,7 @@
 		"commandFragments" : 
 		[
 			{
-				"fragment" : "-g",
+				"fragment" : "-g -g",
 				"role" : "flags"
 			},
 			{

@@ -1,0 +1,1 @@
+/usr/bin/g++ -g -g -rdynamic CMakeFiles/test_protocol.dir/test_protocol.cpp.o -o /home/stu/project/chatserver/bin/test_protocol 

@@ -2,7 +2,7 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "/home/stu/tulun/chatserver/bin/ChatClient"
+			"path" : "/home/stu/project/chatserver/bin/benchmark"
 		}
 	],
 	"backtrace" : 1,
@@ -16,7 +16,7 @@
 		],
 		"files" : 
 		[
-			"src/client/CMakeLists.txt",
+			"test/benchmark/CMakeLists.txt",
 			"CMakeLists.txt"
 		],
 		"nodes" : 
@@ -27,13 +27,13 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 5,
+				"line" : 1,
 				"parent" : 0
 			},
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 7,
+				"line" : 2,
 				"parent" : 0
 			},
 			{
@@ -89,38 +89,38 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "-g"
+					"fragment" : "-g -g"
 				}
 			],
 			"includes" : 
 			[
 				{
 					"backtrace" : 4,
-					"path" : "/home/stu/tulun/chatserver/include"
+					"path" : "/home/stu/project/chatserver/include"
 				},
 				{
 					"backtrace" : 5,
-					"path" : "/home/stu/tulun/chatserver/include/server"
+					"path" : "/home/stu/project/chatserver/include/server"
 				},
 				{
 					"backtrace" : 6,
-					"path" : "/home/stu/tulun/chatserver/include/server/db"
+					"path" : "/home/stu/project/chatserver/include/server/db"
 				},
 				{
 					"backtrace" : 7,
-					"path" : "/home/stu/tulun/chatserver/include/server/model"
+					"path" : "/home/stu/project/chatserver/include/server/model"
 				},
 				{
 					"backtrace" : 8,
-					"path" : "/home/stu/tulun/chatserver/include/server/redis"
+					"path" : "/home/stu/project/chatserver/include/server/redis"
 				},
 				{
 					"backtrace" : 9,
-					"path" : "/home/stu/tulun/chatserver/thirdparty"
+					"path" : "/home/stu/project/chatserver/thirdparty"
 				},
 				{
 					"backtrace" : 10,
-					"path" : "/home/stu/tulun/chatserver/include/asynlog"
+					"path" : "/home/stu/project/chatserver/include/asynlog"
 				}
 			],
 			"language" : "CXX",
@@ -130,13 +130,13 @@
 			]
 		}
 	],
-	"id" : "ChatClient::@8ca63c80a879d0067daa",
+	"id" : "benchmark::@d0bc8edb97cadbdf7445",
 	"link" : 
 	{
 		"commandFragments" : 
 		[
 			{
-				"fragment" : "-g",
+				"fragment" : "-g -g",
 				"role" : "flags"
 			},
 			{
@@ -151,12 +151,12 @@
 		],
 		"language" : "CXX"
 	},
-	"name" : "ChatClient",
-	"nameOnDisk" : "ChatClient",
+	"name" : "benchmark",
+	"nameOnDisk" : "benchmark",
 	"paths" : 
 	{
-		"build" : "src/client",
-		"source" : "src/client"
+		"build" : "test/benchmark",
+		"source" : "test/benchmark"
 	},
 	"sourceGroups" : 
 	[
@@ -173,7 +173,7 @@
 		{
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
-			"path" : "src/client/main.cpp",
+			"path" : "test/benchmark/benchmark.cpp",
 			"sourceGroupIndex" : 0
 		}
 	],

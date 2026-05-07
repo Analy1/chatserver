@@ -2,7 +2,7 @@
 #include"CommonConnectionPool.h"
 
 // 全局默认：开启连接池（你现在项目正常运行的状态）
-bool ConnectionPool::pool_enable = false;
+bool ConnectionPool::pool_enable = true;
 
 //线程安全的懒汉单例函数接口
 ConnectionPool* ConnectionPool::getConnectionPool()
