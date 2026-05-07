@@ -29,7 +29,7 @@ public:
 	MYSQL_RES* query(string sql);
 
 	//刷新一下连接的起始空闲时间点
-	void refAliveTime() { _alivetime == clock(); }// 每次使用连接时调用，重置"空闲计时器"
+	void refAliveTime() { _alivetime = clock(); }// 每次使用连接时调用，重置"空闲计时器"
 	//返回存活时间
 	clock_t getAliveTime() const{ return clock() - _alivetime; }
 
