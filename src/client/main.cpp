@@ -64,7 +64,10 @@ sem_t rwsem;
 // 记录登录状态
 atomic_bool g_isLoginSuccess{false};
 
-//心跳线程
+// 心跳线程控制标志
+atomic_bool g_heartBeatRunning{false};
+
+// 心跳线程
 void startHeartBeatTask(int clientfd, int userid);
 
 
@@ -168,10 +171,8 @@ int main(int argc, char **argv)
             {
                 // 进入聊天主菜单页面
                 isMainMenuRunning = true;
-                startHeartBeatTask(clientfd,id);//启动心跳线程
+                startHeartBeatTask(clientfd, id);
                 mainMenu(clientfd);
-
-                
             }
         }
         break;
@@ -199,6 +200,7 @@ int main(int argc, char **argv)
         }
         break;
         case 3: // quit业务
+            g_heartBeatRunning = false;  // 先停心跳，再关连接
             close(clientfd);
             sem_destroy(&rwsem);
             exit(0);
@@ -374,25 +376,22 @@ void readTaskHandler(int clientfd)
 }
 
 
-//心跳函数
+// 心跳线程
 void startHeartBeatTask(int clientfd, int userid)
 {
-    // 后台线程发心跳
+    g_heartBeatRunning = true;
     thread heartThread([=]() {
-        while (true)
+        while (g_heartBeatRunning)
         {
             json js;
             js["msgid"] = HEART_BEAT_MSG;
             js["id"] = userid;
-
             string msg = js.dump();
-            sendMsg(clientfd, msg);
-
-            sleep(5); // 5秒一次
+            if (sendMsg(clientfd, msg) == -1) break;
+            sleep(5);
         }
     });
-
-    heartThread.detach(); // 后台运行
+    heartThread.detach();
 }
 
 // 显示当前登录成功用户的基本信息
@@ -613,6 +612,8 @@ void groupchat(int clientfd, string str)
 // "loginout" command handler
 void loginout(int clientfd, string)
 {
+    g_heartBeatRunning = false;  // 先停心跳
+
     json js;
     js["msgid"] = LOGINOUT_MSG;
     js["id"] = g_currentUser.getId();

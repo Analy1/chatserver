@@ -74,7 +74,9 @@ void ChatServer::onMessage(const TcpConnectionPtr &conn,
 
         // 4. 反序列化 + 业务分发
         json js = json::parse(buf);
-        auto msgHandler = ChatService::instance()->getHandler(js["msgid"].get<int>());
+        int msgid = js["msgid"].get<int>();
+        LOG_DEBUG << "收到来自 " << conn->peerAddress().toIpPort() << " 的消息, msgid=" << msgid << ", 消息体长度=" << len;
+        auto msgHandler = ChatService::instance()->getHandler(msgid);
         msgHandler(conn, js, time);
     }
 }

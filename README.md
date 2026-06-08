@@ -20,6 +20,7 @@
   - [2. MySQL 连接池与性能调优——QPS 提升 52 倍](#2-mysql-连接池与性能调优qps-提升-52-倍)
   - [3. 异步日志系统](#3-异步日志系统)
   - [4. 自研压力测试工具与系统化性能分析](#4-自研压力测试工具与系统化性能分析)
+  - [5. 应用层心跳检测机制](#5-应用层心跳检测机制)
 - [压测结果](#压测结果)
 - [快速开始](#快速开始)
   - [环境要求](#环境要求)
@@ -131,7 +132,8 @@ Client A ──→ Nginx ──→ Server 1
 | 群组聊天   | 创建 / 加入群组，群发消息            | GroupModel                 |
 | 离线消息   | 用户不在线时存储消息，上线后自动推送 | OfflineMessageModel        |
 | 好友管理   | 添加好友                             | FriendModel                |
-| 心跳保活   | TCP 心跳检测，超时清理僵尸连接       | Muduo TcpConnection        |
+| 心跳保活   | 应用层心跳检测，5s 间隔/10s 超时     | 客户端线程 + 服务端定时器   |
+|             | 超时自动关闭 + 清理在线/Redis/DB   | Chatservice, Muduo          |
 | 注销退出   | 下线通知，清理在线状态               | Chatservice, Redis         |
 
 ### 消息 ID 映射
@@ -149,6 +151,7 @@ Client A ──→ Nginx ──→ Server 1
 | 12    | C → S | 创建群组                 |
 | 13    | C → S | 加入群组                 |
 | 14    | C → S | 群组聊天                 |
+| 99    | C → S | 心跳保活                 |
 
 ---
 
@@ -362,6 +365,197 @@ int main() {
 ```
 
 
+
+---
+
+### 5. 应用层心跳检测机制
+
+#### 背景
+
+TCP 连接断开时，服务端并**不总是能立即感知**：
+
+| 场景 | 服务端感知方式 | 延迟 |
+|:---|:---|:---|
+| 客户端正常退出 | 收到 FIN，触发 `onConnection(disconnected)` | 即时 |
+| 客户端进程崩溃 | 操作系统关闭 socket，发送 FIN/RST | 即时 |
+| 客户端断网 / 机器宕机 | **没有任何通知** | **永远不知道** |
+| 网络中间设备断开 | 同上 | 同上 |
+
+操作系统自带的 `TCP Keepalive` 默认 2 小时才发送一次探测，不适用于即时通信场景。因此必须由应用层自行实现心跳检测，**快速发现并清理死连接**。
+
+#### 整体设计
+
+```
+客户端                              服务端
+  │                                  │
+  │  ─── 登录成功 ─────────────────  │
+  │                                  │
+  │  [启动心跳线程]                  │  [启动超时扫描器]
+  │   每 5s 发送心跳                  │   每 5s 扫描所有连接
+  │                                  │
+  │  ─── HEART_BEAT_MSG(id=1) ───   │
+  │                                  │  _connLastHeartBeat[conn] = now()
+  │  ─── HEART_BEAT_MSG(id=1) ───   │
+  │  ...                             │  ...
+  │                                  │
+  │  [客户端断网]                    │
+  │  (无法发送)                      │
+  │                                  │  [00:00  扫描] 正常
+  │                                  │  [00:05  扫描] 正常
+  │                                  │  [00:10  扫描] 超过 10s → 超时!
+  │                                  │    ├─ clientCloseException()
+  │                                  │    │   ├─ _userConnMap.erase
+  │                                  │    │   ├─ redis.unsubscribe
+  │                                  │    │   ├─ user.setState(offline)
+  │                                  │    │   └─ _connLastHeartBeat.erase
+  │                                  │    └─ conn->shutdown()
+  │                                  │
+  │  [网络恢复]                       │
+  │  send(心跳) → 连接已关闭          │
+  │  recv → 0 → 进程退出              │
+```
+
+#### 客户端实现
+
+**启动时机**：用户登录成功后、进入主菜单前。
+
+**线程模型**：一个后台 detached 线程循环发送，通过 `g_heartBeatRunning` 原子标志控制生命周期。
+
+```cpp
+// 客户端心跳线程
+atomic<bool> g_heartBeatRunning{false};
+
+void startHeartBeatTask(int clientfd, int userid) {
+    g_heartBeatRunning = true;
+    thread([=]() {
+        while (g_heartBeatRunning) {
+            json js;
+            js["msgid"] = HEART_BEAT_MSG;
+            js["id"] = userid;              // 告诉服务端谁还活着
+            if (sendMsg(clientfd, js.dump()) == -1) break;  // 连接断开，自动退出
+            sleep(5);                       // 5 秒间隔
+        }
+    }).detach();
+}
+```
+
+**退出机制**：始终遵循"先停心跳，再关连接"的原则。
+
+```
+loginout（主动注销）:
+  g_heartBeatRunning = false;        // ① 停心跳
+  send(LOGOUT_MSG);                  // ② 发注销请求
+  isMainMenuRunning = false;         // ③ 退出主菜单
+
+quit（退出程序）:
+  g_heartBeatRunning = false;        // ① 停心跳
+  close(clientfd);                   // ② 关连接
+  exit(0);                           // ③ 退出进程
+```
+
+这个顺序保证心跳线程不会在 socket 已关闭后还尝试发送数据。
+
+#### 服务端实现
+
+服务端心跳处理由两个独立任务构成：
+
+**任务一：心跳消息处理器（`heartBeat`）**
+
+每次收到客户端心跳时触发，只做一件事——更新该连接的最后心跳时间。
+
+```cpp
+void ChatService::heartBeat(const TcpConnectionPtr &conn, json &js, Timestamp) {
+    int userid = js["id"].get<int>();
+    {
+        lock_guard<mutex> lock(_heartBeatMutex);
+        _connLastHeartBeat[conn] = Timestamp::now();  // 记录当前时间
+    }
+    // 单向心跳，不给客户端回复
+}
+```
+
+关键点：
+- **key 是连接对象** `TcpConnectionPtr`，不是用户 ID。因为连接断开重建后是新的对象
+- **单向心跳**，服务端不回复。双向确认对即时通信没有额外收益，只会浪费带宽
+
+**任务二：超时扫描定时器（`checkHeartBeatTimeout`）**
+
+由 EventLoop 的 `runEvery` 驱动，每 5 秒执行一次，不占用独立线程。
+
+```cpp
+// 在 main.cpp 中注册
+loop.runEvery(5.0, []() { ChatService::instance()->checkHeartBeatTimeout(); });
+```
+
+扫描逻辑：
+
+```cpp
+void ChatService::checkHeartBeatTimeout() {
+    Timestamp now = Timestamp::now();
+    vector<TcpConnectionPtr> needClose;
+
+    {
+        lock_guard<mutex> lock(_heartBeatMutex);
+        for (auto &pair : _connLastHeartBeat) {
+            // 当前时间 - 最后心跳时间 > 10 秒 → 超时
+            if (timeDifference(now, pair.second) > 10.0) {
+                needClose.push_back(pair.first);
+            }
+        }
+        for (auto &conn : needClose) {
+            _connLastHeartBeat.erase(conn);  // 先删除，防内存泄漏
+        }
+    }
+
+    // 出锁后再关闭连接（避免死锁：clientCloseException 内部需要 _connMutex）
+    for (auto &conn : needClose) {
+        clientCloseException(conn);  // 清理业务数据
+        conn->shutdown();            // 关闭 TCP 连接
+    }
+}
+```
+
+**超时关闭的完整清理链**：
+
+```
+checkHeartBeatTimeout
+  └─ clientCloseException(conn)
+       ├─ _userConnMap.erase                      # ① 删除在线映射
+       ├─ redis.unsubscribe(user.getId())          # ② 取消 Redis 订阅
+       ├─ user.setState("offline")                 # ③ 数据库状态离线
+       │   └─ _userModel.updateState(user)
+       └─ _connLastHeartBeat.erase(conn)           # ④ 删除心跳记录
+  └─ conn->shutdown()                              # ⑤ 关闭 TCP 连接
+       └─ muduo 触发 onConnection(disconnected)    # 确认关闭
+```
+
+#### 关键参数
+
+| 参数 | 值 | 说明 |
+|:---|:---|:---|
+| 客户端心跳间隔 | 5 秒 | 线程 `sleep(5)` |
+| 服务端扫描间隔 | 5 秒 | `loop.runEvery(5.0, ...)` |
+| 超时阈值 | 10 秒 | 心跳间隔的 2 倍，容忍一次丢包 |
+| 键类型 | `TcpConnectionPtr` | 连接对象指针，非用户 ID |
+| 锁定策略 | 锁内收集 + 锁外关闭 | 避免多锁死锁 |
+
+#### 边界情况处理
+
+| 场景 | 处理方式 |
+|:---|:---|
+| 网络短暂闪断（<10s） | 超时阈值内恢复，连接不受影响 |
+| 服务端宕机 | 客户端 `recv` 返回 0，接收线程退出进程 |
+| 客户端进程崩溃 | 操作系统关闭 socket，服务端收到 FIN → `onConnection` |
+| 同一用户重复登录 | 两次独立的 `TcpConnection`，心跳记录互不干扰，旧连接超时后自动清理 |
+
+#### 为什么不用 TCP Keepalive？
+
+| 特性 | TCP Keepalive | 应用层心跳 |
+|:---|:---|:---|
+| 默认探测间隔 | 2 小时 | 5 秒 |
+| 携带业务信息 | 否（无用户 ID） | 是（可携带 userid） |
+| 可配置性 | 需修改系统参数 | 代码层随意调整 |
+| 适用场景 | 长连接保活 | **即时通信心跳检测** |
 
 ---
 

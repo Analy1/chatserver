@@ -2,6 +2,7 @@
 //#include "db.h"
 #include "server/db/Connection.h"
 #include "server/db/CommonConnectionPool.h"
+#include "Logger.hpp"
 // 存储用户的离线消息
 void OfflineMsgModel::insert(int userid, string msg)
 {
@@ -14,6 +15,7 @@ void OfflineMsgModel::insert(int userid, string msg)
     if(conn != nullptr)
     {
         conn->update(sql);
+        LOG_INFO << "存储离线消息: userid=" << userid;
     }
 
 }
@@ -30,6 +32,7 @@ void OfflineMsgModel::remove(int userid)
     if(conn != nullptr)
     {
         conn->update(sql);
+        LOG_INFO << "清除用户离线消息: userid=" << userid;
     }
 }
 
@@ -58,9 +61,11 @@ vector<string> OfflineMsgModel::query(int userid)
            }
 
            mysql_free_result(res);
+           LOG_DEBUG << "查询离线消息: userid=" << userid << ", 消息数=" << vec.size();
            return vec;
     }
     }
+    LOG_DEBUG << "未找到离线消息: userid=" << userid;
     return vec;
     
 }

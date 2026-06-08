@@ -1,5 +1,6 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include"CommonConnectionPool.h"
+#include"Logger.hpp"
 
 // 全局默认：开启连接池（你现在项目正常运行的状态）
 bool ConnectionPool::pool_enable = true;
@@ -98,6 +99,8 @@ ConnectionPool::ConnectionPool()
 		_connectionCnt++;
 	}
 
+	LOG_INFO << "连接池初始化完成, 初始连接数=" << _initSize << ", 最大连接数=" << _maxSize;
+
 	//启动一个新的线程，作为连接的生产者
 	thread produce(std::bind(&ConnectionPool::produceConnectionTask, this));
 	produce.detach();
@@ -127,6 +130,7 @@ void ConnectionPool::produceConnectionTask()
 			p->refAliveTime();//刷新一下开始空闲的起始时间
 			_connectionQue.push(p);
 			_connectionCnt++;
+			LOG_INFO << "连接池生产新连接, 当前连接数=" << _connectionCnt.load();
 		}
 		//通知消费者线程，可以消费连接了
 		cv.notify_all();
@@ -176,10 +180,12 @@ shared_ptr<Connection> ConnectionPool::getConnection()
 			unique_lock<mutex> lock(_queueMutex);
 			pcon->refAliveTime();//刷新一下开始空闲的起始时间
 			_connectionQue.push(pcon);
-			
+			LOG_DEBUG << "连接归还到连接池, 当前总连接数=" << _connectionCnt.load();
 		});
 	_connectionQue.pop();
-	
+
+	LOG_DEBUG << "从连接池获取连接, 当前连接池中剩余=" << _connectionQue.size() << ", 总连接数=" << _connectionCnt.load();
+
 	cv.notify_all();//消费完连接以后，通知生产者线程检查一下，如果队列为空了，赶紧生产连接
 	return sp;
 }
@@ -202,6 +208,7 @@ void ConnectionPool::scannerConnectionTask()
 			{
 				_connectionQue.pop();
 				_connectionCnt--;
+				LOG_INFO << "连接池回收空闲连接, 当前总连接数=" << _connectionCnt.load();
 				delete p;//调用~Connection()释放连接 真正释放连接
 			}
 			else

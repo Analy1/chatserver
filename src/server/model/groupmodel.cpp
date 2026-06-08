@@ -2,6 +2,7 @@
 //#include "db.h"
 #include "server/db/Connection.h"
 #include "server/db/CommonConnectionPool.h"
+#include "Logger.hpp"
 
 // 创建群组
 bool GroupModel::createGroup(Group &group)
@@ -18,9 +19,11 @@ bool GroupModel::createGroup(Group &group)
         if(conn->update(sql))
         {
             group.setId(mysql_insert_id(conn->getConnection()));
+            LOG_INFO << "创建群组成功: id=" << group.getId() << ", name=" << group.getName();
             return true;
         }
     }
+    LOG_ERROR << "创建群组失败: name=" << group.getName();
     return false;
 }
 
@@ -36,6 +39,7 @@ void GroupModel::addGroup(int userid, int groupid, string role)
     if(conn != nullptr)
     {
         conn->update(sql);
+        LOG_INFO << "加入群组: userid=" << userid << ", groupid=" << groupid << ", role=" << role;
     }
 }
 
@@ -96,6 +100,7 @@ vector<Group> GroupModel::queryGroups(int userid)
 
         }
     }
+    LOG_DEBUG << "查询用户群组: userid=" << userid << ", 群组数=" << groupVec.size();
     return groupVec; 
 }
 
@@ -122,5 +127,6 @@ vector<int> GroupModel::queryGroupUsers(int userid, int groupid)
             mysql_free_result(res);
         }
     }
+    LOG_DEBUG << "查询群组成员(排除自己): userid=" << userid << ", groupid=" << groupid << ", 成员数=" << idVec.size();
     return idVec;
 }

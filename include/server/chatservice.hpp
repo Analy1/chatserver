@@ -56,7 +56,7 @@ public:
     // 心跳处理
     void heartBeat(const TcpConnectionPtr &conn, json &js, Timestamp time);
 
-    // 心跳超时检测定时器（每隔 5 秒检查一次）
+    // 心跳超时检测定时器
     void checkHeartBeatTimeout();
 
     //服务器异常，业务重置方法
@@ -76,7 +76,7 @@ private:
     ChatService();
 
 
-    // 存储每个连接最后一次心跳时间
+    // 存储每个连接的最后心跳时间
     std::unordered_map<muduo::net::TcpConnectionPtr, muduo::Timestamp> _connLastHeartBeat;
     mutex _heartBeatMutex;
 

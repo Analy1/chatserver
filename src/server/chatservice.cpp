@@ -40,8 +40,6 @@ ChatService::ChatService()
     _msgHandlerMap.insert({CREATE_GROUP_MSG, std::bind(&ChatService::createGroup, this, _1, _2, _3)});
     _msgHandlerMap.insert({ADD_GROUP_MSG, std::bind(&ChatService::addGroup, this, _1, _2, _3)});
     _msgHandlerMap.insert({GROUP_CHAT_MSG, std::bind(&ChatService::groupChat, this, _1, _2, _3)});
-
-    // 心跳
     _msgHandlerMap.insert({HEART_BEAT_MSG, std::bind(&ChatService::heartBeat, this, _1, _2, _3)});
 
     // 连接Redis服务器
@@ -288,7 +286,9 @@ void ChatService::clientCloseException(const TcpConnectionPtr &conn)
 // 一对一聊天业务
 void ChatService::oneChat(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
-    int toid = js["toid"].get<int>(); // 对方ID
+    int fromid = js["id"].get<int>(); // 发送方ID
+    int toid = js["toid"].get<int>(); // 接收方ID
+    LOG_INFO << "用户 " << fromid << " 向用户 " << toid << " 发送一对一消息";
 
     // 在本服务器上找
     {
@@ -383,7 +383,7 @@ void ChatService::groupChat(const TcpConnectionPtr &conn, json &js, Timestamp ti
             }
         }
     }
-    LOG_DEBUG << "Group chat: user " << userid << " sent message to group " << groupid;
+    LOG_DEBUG << "群聊消息: 用户 " << userid << " 向群组 " << groupid << " 发送消息, 群成员数=" << useridVec.size();
 }
 
 // 从redis消息队列中获取订阅的消息
@@ -399,23 +399,18 @@ void ChatService::handleRedisSubscribeMessage(int userid, string msg)
     }
 
     // 存储该用户的离线消息
+    LOG_DEBUG << "用户 " << userid << " 不在本服务器, 存储为离线消息";
     _offlineMsgModel.insert(userid, msg);
 }
 
 // 心跳处理
 void ChatService::heartBeat(const TcpConnectionPtr &conn, json &js, Timestamp time)
 {
-
-    // 1. 获取用户 id（客户端心跳会发过来）
     int userid = js["id"].get<int>();
     {
         lock_guard<mutex> lock(_heartBeatMutex);
-        // 2. 更新该连接的最后心跳时间
-        _connLastHeartBeat[conn] = time.now();
-        //cout << ">>> 心跳已保存！当前map大小：" << _connLastHeartBeat.size() << endl;
+        _connLastHeartBeat[conn] = Timestamp::now();
     }
-
-    // std::cout << ">> 收到用户【" << userid << "】的心跳包" << endl;
     LOG_DEBUG << "Heartbeat from user " << userid;
 }
 
@@ -426,9 +421,7 @@ void ChatService::checkHeartBeatTimeout()
     vector<TcpConnectionPtr> needClose;
 
     {
-        lock_guard<mutex> lock(_heartBeatMutex); // 加锁
-
-        // 先收集，后删除
+        lock_guard<mutex> lock(_heartBeatMutex);
         for (auto &pair : _connLastHeartBeat)
         {
             if (timeDifference(now, pair.second) > 10.0)
@@ -436,19 +429,16 @@ void ChatService::checkHeartBeatTimeout()
                 needClose.push_back(pair.first);
             }
         }
-
-        // 在锁内删除超时的连接
         for (auto &conn : needClose)
         {
             _connLastHeartBeat.erase(conn);
         }
-    } // 锁在这里释放
+    }
 
-    // 在锁外断开连接（避免死锁）
     for (auto &conn : needClose)
     {
-        // cout << ">> 心跳超时，断开无效连接" << endl;
         LOG_INFO << "Heartbeat timeout, closing connection";
-        clientCloseException(conn); // clientCloseException 内部会自己加锁
+        clientCloseException(conn);
+        conn->shutdown();
     }
 }

@@ -81,7 +81,6 @@ int main(int argc, char **argv)
     InetAddress addr(ip, port);
     ChatServer server(&loop, addr, "ChatServer");
 
-    // loop.runEvery(5.0, std::bind(&ChatService::checkHeartBeatTimeout, ChatService::instance()));
     loop.runEvery(5.0, []()
                   { ChatService::instance()->checkHeartBeatTimeout(); });
 

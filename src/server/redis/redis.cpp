@@ -66,6 +66,7 @@ bool Redis::publish(int channel, string message)
         return false;
     }
     freeReplyObject(reply);
+    LOG_DEBUG << "Redis发布消息到通道 channel=" << channel << " 成功";
     return true;
 }
 
@@ -93,6 +94,7 @@ bool Redis::subscribe(int channel)
         }
     }
     // redisGetReply
+    LOG_INFO << "Redis订阅通道 channel=" << channel << " 成功";
 
     return true;
 }
@@ -117,6 +119,7 @@ bool Redis::unsubscribe(int channel)
             return false;
         }
     }
+    LOG_INFO << "Redis取消订阅通道 channel=" << channel << " 成功";
     return true;
 }
 
@@ -135,6 +138,7 @@ void Redis::observer_channel_message()
         */
         if (reply != nullptr && reply->element[2] != nullptr && reply->element[2]->str != nullptr)
         {
+            LOG_DEBUG << "收到Redis订阅消息, 通道channel=" << reply->element[1]->str;
             // 给业务层上报通道上发生的消息
             _notify_message_handler(atoi(reply->element[1]->str), reply->element[2]->str);
         }

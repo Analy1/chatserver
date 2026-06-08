@@ -2,6 +2,7 @@
 //#include "db.h"
 #include "server/db/Connection.h"
 #include "server/db/CommonConnectionPool.h"
+#include "Logger.hpp"
 
 
 // 添加好友关系
@@ -16,6 +17,7 @@ void FriendModel::insert(int userid, int friendid)
     if(conn != nullptr)
     {
         conn->update(sql);
+        LOG_INFO << "添加好友: userid=" << userid << ", friendid=" << friendid;
     }
 }
 
@@ -48,9 +50,11 @@ vector<User> FriendModel::query(int userid)
            }
 
            mysql_free_result(res);
+           LOG_DEBUG << "查询好友列表: userid=" << userid << ", 好友数=" << vec.size();
            return vec;
            
         }
     }
+    LOG_DEBUG << "未找到好友: userid=" << userid;
     return vec;
 }
