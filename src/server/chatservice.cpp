@@ -7,6 +7,7 @@
 #include <iostream>
 #include <arpa/inet.h>   // htonl
 #include "Logger.hpp"
+#include "server/threadpool/ThreadPoolFactory.hpp"
 
 using namespace muduo;
 using namespace std;
@@ -41,6 +42,10 @@ ChatService::ChatService()
     _msgHandlerMap.insert({ADD_GROUP_MSG, std::bind(&ChatService::addGroup, this, _1, _2, _3)});
     _msgHandlerMap.insert({GROUP_CHAT_MSG, std::bind(&ChatService::groupChat, this, _1, _2, _3)});
     _msgHandlerMap.insert({HEART_BEAT_MSG, std::bind(&ChatService::heartBeat, this, _1, _2, _3)});
+
+    // 初始化线程池：通过工厂创建，切换类型只需改 PoolType 枚举即可
+    // 当前使用 FixedThreadPool（固定线程），可切换为 Cached 或 WorkStealing
+    _threadPool = tulun::CreateThreadPool(tulun::PoolType::Fixed);
 
     // 连接Redis服务器
     if (_redis.connect())
@@ -204,6 +209,12 @@ void ChatService::reset()
     LOG_INFO << "Server reset: all users set to offline";
 }
 
+// 获取线程池接口
+tulun::IThreadPool& ChatService::getThreadPool()
+{
+    return *_threadPool;
+}
+
 // 获取消息对应的处理器
 MsgHandler ChatService::getHandler(int msgid)
 {
@@ -251,31 +262,34 @@ void ChatService::loginout(const TcpConnectionPtr &conn, json &js, Timestamp tim
 // 处理客户端异常退出
 void ChatService::clientCloseException(const TcpConnectionPtr &conn)
 {
-    User user;
+    int userid = -1;
     {
         lock_guard<mutex> lock(_connMutex);
         for (auto it = _userConnMap.begin(); it != _userConnMap.end(); ++it)
         {
             if (it->second == conn)
             {
-                // 从map表删除用户的连接信息
-                user.setId(it->first);
+                userid = it->first;
                 _userConnMap.erase(it);
                 break;
             }
         }
     }
 
-    // 用户注销，相当于下线，在redis中取消订阅通道
-    _redis.unsubscribe(user.getId());
-
-    // 更新用户的状态信息
-    if (user.getId() != -1)
+    // 用户从未登录成功，不需要清理（避免无效的 Redis/MySQL 操作）
+    if (userid == -1)
     {
-        user.setState("offline");
-        _userModel.updateState(user);
-        LOG_INFO << "User " << user.getId() << " disconnected abnormally, set to offline";
+        lock_guard<mutex> lock(_heartBeatMutex);
+        _connLastHeartBeat.erase(conn);
+        return;
     }
+
+    // 用户已登录，清理 Redis 订阅和在线状态
+    _redis.unsubscribe(userid);
+
+    User user(userid, "", "", "offline");
+    _userModel.updateState(user);
+    LOG_INFO << "User " << userid << " disconnected, set to offline";
 
     {
         lock_guard<mutex> lock(_heartBeatMutex);

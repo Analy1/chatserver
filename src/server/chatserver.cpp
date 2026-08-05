@@ -1,5 +1,6 @@
 #include "chatserver.hpp"
 #include "chatservice.hpp"
+#include "server/threadpool/IThreadPool.hpp"
 #include "public.hpp"
 #include "json.hpp"
 #include "Logger.hpp"
@@ -17,11 +18,8 @@ ChatServer::ChatServer(EventLoop *loop,
                        const string &nameArg)
     : _server(loop, listenAddr, nameArg), _loop(loop)
 {
-    // 注册连接回调
     _server.setConnectionCallback(std::bind(&ChatServer::onConnection, this, _1));
-    // 注册消息回调
     _server.setMessageCallback(std::bind(&ChatServer::onMessage, this, _1, _2, _3));
-    // 设置线程数量
     _server.setThreadNum(4);
 }
 
@@ -75,8 +73,14 @@ void ChatServer::onMessage(const TcpConnectionPtr &conn,
         // 4. 反序列化 + 业务分发
         json js = json::parse(buf);
         int msgid = js["msgid"].get<int>();
-        LOG_DEBUG << "收到来自 " << conn->peerAddress().toIpPort() << " 的消息, msgid=" << msgid << ", 消息体长度=" << len;
+        LOG_DEBUG << "收到来自 " << conn->peerAddress().toIpPort()
+                  << " 的消息, msgid=" << msgid << ", 消息体长度=" << len;
         auto msgHandler = ChatService::instance()->getHandler(msgid);
-        msgHandler(conn, js, time);
+
+        // 投递到线程池异步处理，I/O 线程立即返回继续接收
+        ChatService::instance()->getThreadPool().AddTask(
+            [conn, js = std::move(js), time, msgHandler]() mutable {
+                msgHandler(conn, js, time);
+            });
     }
 }
