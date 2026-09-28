@@ -138,20 +138,19 @@ Client A ──→ Nginx ──→ Server 1
 
 ### 消息 ID 映射
 
-| msgid | 方向  | 操作                     |
-| :---- | :---- | :----------------------- |
-| 1     | C → S | 登录请求                 |
-| 2     | S → C | 登录响应（含 errno）     |
-| 4     | C → S | 注册请求                 |
-| 5     | S → C | 注册响应（含 errno、id） |
-| 6     | C → S | 一对一聊天请求           |
-| 7     | S → C | 一对一聊天响应（ACK）    |
-| 8     | S → C | 服务器主动推送聊天消息   |
-| 11    | C → S | 添加好友                 |
-| 12    | C → S | 创建群组                 |
-| 13    | C → S | 加入群组                 |
-| 14    | C → S | 群组聊天                 |
-| 99    | C → S | 心跳保活                 |
+| msgid | 方向  | 操作                                     |
+| :---- | :---- | :--------------------------------------- |
+| 1     | C → S | 登录请求                                 |
+| 2     | S → C | 登录响应（含 errno）                     |
+| 3     | C → S | 注销请求                                 |
+| 4     | C → S | 注册请求                                 |
+| 5     | S → C | 注册响应（含 errno、id）                 |
+| 6     | C ⇄ S | 一对一聊天（C→S 请求，S→C 转发给接收方） |
+| 7     | C → S | 添加好友                                 |
+| 8     | C → S | 创建群组                                 |
+| 9     | C → S | 加入群组                                 |
+| 10    | C ⇄ S | 群组聊天（C→S 请求，S→C 群发给成员）     |
+| 99    | C → S | 心跳保活                                 |
 
 ---
 
@@ -678,13 +677,14 @@ chatserver/
 │   │   ├── AppendFile.hpp          #     文件 I/O 封装
 │   │   ├── Timestamp.hpp           #     高精度时间戳
 │   │   ├── CountDownLatch.hpp      #     线程同步门闩
-│   │   └── LogCommon.hpp          #     日志级别等常量
+│   │   └── LogCommon.hpp           #     日志级别等常量
 │   ├── server/                     #   业务模块
 │   │   ├── chatserver.hpp          #     Muduo 网络层封装
 │   │   ├── chatservice.hpp         #     业务分发层
 │   │   ├── db/                     #     MySQL 连接池头文件
 │   │   ├── model/                  #     数据模型（User/Group/Friend/Offline）
-│   │   └── redis/                  #     Redis 封装
+│   │   ├── redis/                  #     Redis 封装
+│   │   └── threadpool/             #     工作窃取线程池
 │   └── public.hpp                  #   公共常量
 ├── src/                            # 源文件
 │   ├── server/                     #   服务端
@@ -698,16 +698,11 @@ chatserver/
 │   └── asynlog/                    #   日志系统实现
 ├── test/                           # 测试工具
 │   ├── benchmark/                  #   压力测试工具
-│   │   ├── benchmark.cpp
-│   │   ├── 压测说明.md             #     测试架构 & 使用指南
-│   │   └── 压测结果.md             #     测试数据 & 分析
+│   │   └── benchmark.cpp
 │   ├── testJson/                   #   JSON 测试
 │   └── testmuduo/                  #   Muduo 框架测试
 ├── thirdparty/
 │   └── json.hpp                    # nlohmann/json 单头文件库
-├── 项目文档/
-│   ├── TCP粘包解决方案.md           # 协议设计文档
-│   └── 架构分析文档.md
 ├── CMakeLists.txt                  # 顶层 CMake 构建配置
 ├── autobuild.sh                    # 自动编译脚本
 └── mysql.cnf                       # MySQL 连接配置
