@@ -1,26 +1,22 @@
-
-
-
-
-
-#include "SyncQueue_2.hpp"
-#include "IThreadPool.hpp"
-
-#include <functional>
-#include <memory>
-#include <vector>
-#include <atomic>
-using namespace std;
-
 #ifndef WORKSTEALINGPOOL_HPP
 #define WORKSTEALINGPOOL_HPP
+
+#include <functional>
+#include <future>
+#include <memory>
+#include <vector>
+#include <thread>
+#include <atomic>
+#include <mutex>
+
+#include "SyncQueue_2.hpp"
 
 namespace tulun
 {
     /* 工作窃取线程池 */
     // 核心思想：每个线程优先处理自己队列的任务，
     // 自己的队列空了就去"偷"其他线程队列的任务
-    class WorkStealingThreadPool : public IThreadPool
+    class WorkStealingThreadPool
     {
     public:
         using Task = std::function<void(void)>;
@@ -54,48 +50,46 @@ namespace tulun
 
         // 工作线程的主循环函数
         // index：当前线程的编号，对应自己的专属队列
-        // 工作线程的主循环函数
-// index：当前线程的编号，对应自己的专属队列
-void RunInThread(const size_t index)
-{
-    while (m_running.load())
-    {
-        Task task;  // 单个任务
+        void RunInThread(const size_t index)
+        {
+            while (m_running.load())
+            {
+                Task task; // 单个任务
 
-        // 第一步：尝试从自己的队列取任务
-        if (m_queue.Take(task, index) == 0)
-        {
-            if (task)
-            {
-                task();
-            }
-        }
-        else
-        {
-            // 第二步：自己的队列空了，尝试偷别人的任务（遍历所有其他线程）
-            bool stolen = false;
-            for (size_t offset = 1; offset < m_numThreads; ++offset)
-            {
-                size_t victim = (index + offset) % m_numThreads;  // 轮询选择受害者
-                if (m_queue.Take(task, victim) == 0)
+                // 第一步：尝试从自己的队列取任务
+                if (m_queue.Take(task, index) == 0)
                 {
                     if (task)
                     {
                         task();
-                        stolen = true;
-                        break;  // 偷到一个就执行，然后继续下一轮循环
+                    }
+                }
+                else
+                {
+                    // 第二步：自己的队列空了，尝试偷别人的任务（遍历所有其他线程）
+                    bool stolen = false;
+                    for (size_t offset = 1; offset < m_numThreads; ++offset)
+                    {
+                        size_t victim = (index + offset) % m_numThreads; // 轮询选择受害者
+                        if (m_queue.Take(task, victim) == 0)
+                        {
+                            if (task)
+                            {
+                                task();
+                                stolen = true;
+                                break; // 偷到一个就执行，然后继续下一轮循环
+                            }
+                        }
+                    }
+
+                    // 如果所有队列都空，让出 CPU 避免空转
+                    if (!stolen)
+                    {
+                        std::this_thread::yield();
                     }
                 }
             }
-            
-            // 如果所有队列都空，让出 CPU 避免空转
-            if (!stolen)
-            {
-                std::this_thread::yield();
-            }
         }
-    }
-}
 
         // 停止所有线程
         void StopThreadGroup()
@@ -123,6 +117,7 @@ void RunInThread(const size_t index)
         {
             Start(m_numThreads);
         }
+
         ~WorkStealingThreadPool()
         {
             if (m_running.load())
@@ -133,8 +128,6 @@ void RunInThread(const size_t index)
 
         void Stop()
         {
-            // std::call_once(m_flag,[this]{StopThreadGroup();});
-
             std::call_once(m_flag, std::bind(&WorkStealingThreadPool::StopThreadGroup, this));
         }
 
@@ -145,6 +138,7 @@ void RunInThread(const size_t index)
                 task(); // 队列满则直接执行，不丢任务
             }
         }
+
         void AddTask(const Task &task)
         {
             if (m_queue.Put(task, threadIndex()) != 0)
@@ -153,13 +147,20 @@ void RunInThread(const size_t index)
             }
         }
 
-    protected:
-        void Enqueue(std::function<void()> task) override
+        // 提交任务并返回 future，用于获取异步结果
+        // 示例: auto future = pool.submit([](int x) { return x * 2; }, 3);
+        //       int result = future.get();   // result = 6
+        template <class Func, class... Args>
+        auto submit(Func &&func, Args &&...args)
         {
-            if (m_queue.Put(std::move(task), threadIndex()) != 0)
-            {
-                task(); // 队列满则直接执行，不丢任务
-            }
+            using RetType = decltype(func(std::forward<Args>(args)...));
+
+            auto task = std::make_shared<std::packaged_task<RetType()>>(
+                std::bind(std::forward<Func>(func), std::forward<Args>(args)...));
+
+            std::future<RetType> result = task->get_future();
+            AddTask([task]() { (*task)(); });
+            return result;
         }
     };
 } // namespace tulun

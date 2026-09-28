@@ -13,9 +13,7 @@
 #include"friendmodel.hpp"
 #include"groupmodel.hpp"
 #include"redis.hpp"
-#include <memory>
-
-namespace tulun { class IThreadPool; }
+#include"WorkStealingThreadPool.hpp"
 
 using json = nlohmann::json;
 using namespace std;
@@ -74,8 +72,8 @@ public:
     //从redis消息队列中获取订阅的消息
     void handleRedisSubscribeMessage(int,string);
 
-    //获取线程池接口
-    tulun::IThreadPool& getThreadPool();
+    //获取线程池
+    tulun::WorkStealingThreadPool& getThreadPool();
 
 private:
     ChatService();
@@ -104,8 +102,8 @@ private:
     //redis操作对象
     Redis _redis;
 
-    //线程池对象
-    std::unique_ptr<tulun::IThreadPool> _threadPool;
+    //线程池对象（工作窃取：每线程独享队列，空闲时窃取其他线程的任务）
+    tulun::WorkStealingThreadPool _threadPool;
 };
 
 #endif

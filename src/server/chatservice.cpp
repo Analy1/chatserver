@@ -7,7 +7,6 @@
 #include <iostream>
 #include <arpa/inet.h>   // htonl
 #include "Logger.hpp"
-#include "server/threadpool/ThreadPoolFactory.hpp"
 
 using namespace muduo;
 using namespace std;
@@ -42,10 +41,6 @@ ChatService::ChatService()
     _msgHandlerMap.insert({ADD_GROUP_MSG, std::bind(&ChatService::addGroup, this, _1, _2, _3)});
     _msgHandlerMap.insert({GROUP_CHAT_MSG, std::bind(&ChatService::groupChat, this, _1, _2, _3)});
     _msgHandlerMap.insert({HEART_BEAT_MSG, std::bind(&ChatService::heartBeat, this, _1, _2, _3)});
-
-    // 初始化线程池：通过工厂创建，切换类型只需改 PoolType 枚举即可
-    // 当前使用 FixedThreadPool（固定线程），可切换为 Cached 或 WorkStealing
-    _threadPool = tulun::CreateThreadPool(tulun::PoolType::Fixed);
 
     // 连接Redis服务器
     if (_redis.connect())
@@ -209,10 +204,10 @@ void ChatService::reset()
     LOG_INFO << "Server reset: all users set to offline";
 }
 
-// 获取线程池接口
-tulun::IThreadPool& ChatService::getThreadPool()
+// 获取线程池
+tulun::WorkStealingThreadPool& ChatService::getThreadPool()
 {
-    return *_threadPool;
+    return _threadPool;
 }
 
 // 获取消息对应的处理器

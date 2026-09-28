@@ -1,6 +1,5 @@
 #include "chatserver.hpp"
 #include "chatservice.hpp"
-#include "server/threadpool/IThreadPool.hpp"
 #include "public.hpp"
 #include "json.hpp"
 #include "Logger.hpp"
