@@ -158,416 +158,105 @@ Client A ──→ Nginx ──→ Server 1
 
 ### 1. 手写长度头协议解决 TCP 粘包问题
 
-#### 背景
+TCP 是流式传输协议，数据没有天然的消息边界：多条 JSON 消息可能一次到达（**粘包**），一条消息也可能分多次到达（**半包**）。直接按消息体解析会失败。
 
-TCP 是流式传输协议，数据没有天然的消息边界。当多个 JSON 消息连续发送时，接收端可能一次读取到多条消息（**粘包**），也可能一条消息分多次到达（**半包**）。如果不正确处理，直接调用 `JSON.parse` 会解析失败。
+处理方式分两端：
 
-#### 方案
+- **拆包**（服务端 `ChatServer::onMessage`）：`while` 循环读取 4 字节长度头，判断缓冲区剩余字节是否够一条完整消息——不够就 `break` 等下次数据到达（解决半包），够就取出一条完整消息后继续循环（解决粘包）。
+- **收包**（客户端与压测工具）：`recvn()` 循环 `recv` 直到读满 N 字节，避免一次 `recv` 只拿到半条消息。
 
-4 字节大端长度头 + JSON 消息体：
-
-```
-发送:
-  [0x00, 0x00, 0x00, 0x2A] + '{"msgid":1,"id":100,"password":"123456"}'
-   └────── 长度头 ──────┘   └─────────── JSON 消息体 ───────────────┘
-   length = 42 (0x2A)        实际 42 字节
-```
-
-**服务端拆包**（`chatserver.cpp`）：
-
-```cpp
-void ChatServer::onMessage(const TcpConnectionPtr &conn, Buffer *buffer, Timestamp time) {
-    while (buffer->readableBytes() >= kHeaderLen) {           // 至少 4 字节才能读长度
-        int32_t be_len;
-        memcpy(&be_len, buffer->peek(), sizeof(be_len));      // 读长度头
-        int32_t len = ntohl(be_len);                           // 网络字节序 → 主机字节序
-        if (buffer->readableBytes() < kHeaderLen + len) break; // 半包：等更多数据
-        buffer->retrieve(kHeaderLen);                          // 消费长度头
-        string buf(buffer->peek(), len);                      // 读取 JSON 消息体
-        buffer->retrieve(len);                                 // 消费消息体
-        json js = json::parse(buf);
-        auto handler = ChatService::instance()->getHandler(js["msgid"]);
-        handler(conn, js, time);
-    }
-}
-```
-
-**客户端收发**（`main.cpp`）：
-
-```cpp
-// 发送：先写 4 字节长度头，再写消息体
-static void sendMsg(int fd, const string &msg) {
-    uint32_t be_len = htonl(msg.size());
-    string frame(reinterpret_cast<const char *>(&be_len), sizeof(be_len));
-    frame += msg;
-    send(fd, frame.data(), frame.size(), 0);
-}
-
-// 接收：先读 4 字节获得长度，再精确读取消息体
-static int recvn(int fd, void *buf, size_t n) {
-    size_t remaining = n;
-    char *p = static_cast<char *>(buf);
-    while (remaining > 0) {
-        int ret = recv(fd, p, remaining, 0);
-        if (ret <= 0) return ret;
-        p += ret;
-        remaining -= ret;
-    }
-    return n;
-}
-```
-
-#### 验证方式
-
-协议在真实 TCP 链路上的正确性由压力测试端到端验证：50 用户并发、每用户 100 条消息共 5000 条，**送达率 100%**，无丢包、无解析错误（详见 [压测结果](#压测结果)）。
+端到端验证：50 用户并发、共 5000 条消息，**送达率 100%**（详见 [压测结果](#压测结果)）。
 
 ---
 
 ### 2. MySQL 连接池与性能调优——QPS 提升 52 倍
 
-#### 问题
+**问题**：登录最初每次请求都 `mysql_init` + `mysql_real_connect` + `mysql_close`，单次建连约 50~150ms，还会留下大量 TIME_WAIT 连接。压测显示登录 QPS 只有 **7**。
 
-每次用户登录都执行：
+**方案**：启动时预建一批连接放入池中，业务线程取用后自动归还。
 
-```cpp
-MYSQL *conn = mysql_init(nullptr);
-mysql_real_connect(conn, ...);   // 耗时 ~150ms
-// ... 执行 SQL
-mysql_close(conn);               // 销毁连接
-```
+- **生产者-消费者**：池子空时由专门的连接生产线程按需扩容，业务线程通过条件变量等待可用连接
+- **智能指针自动归还**：`shared_ptr` 绑定自定义 deleter，连接出作用域即归还池中，业务代码不用关心释放
+- **按需扩容 + 空闲回收**：`initSize=10`、`maxSize=1024`，后台线程周期回收超时空闲连接
 
-在高并发下，频繁创建/销毁连接导致：
+**结果**：
 
-- TCP 三次握手 + MySQL 认证握手，单次约 50~150ms
-- 大量 TIME_WAIT 连接堆积，系统资源浪费
-- 登录 QPS 仅 **7**
-
-#### 解决方案：连接池
-
-```
-                    ┌─────────────────────────────┐
-                    │        连接池（单例）          │
-                    │                              │
-                    │  ┌─────┐ ┌─────┐ ┌─────┐    │
-                    │  │ conn│ │ conn│ │ conn│ ... │
-                    │  └─────┘ └─────┘ └─────┘    │
-                    │         ▲                     │
-                    │         │ 信号量 semaphore     │
-                    │   控制并发获取连接上限          │
-                    └─────────┼───────────────────┘
-                              │
-                    ┌─────────┴──────────┐
-                    │   shared_ptr +     │
-                    │   自定义删除器      │
-                    │   (自动归还连接)    │
-                    └───────────────────┘
-```
-
-核心设计点：
-
-- **生产者-消费者模式**：主线程预先创建 N 个连接，业务线程通过信号量获取
-- **智能指针自动归还**：`shared_ptr` 绑定自定义 `deleter`，连接使用完毕后自动归还连接池
-- **动态扩容**：`initSize=10`，`maxSize=1024`，高峰自动扩展
-- **心跳保活**：定时发送 `SELECT 1`，检测连接有效性，自动移除失效连接
-
-#### 结果
-
-| 配置                     | 登录 QPS | 提升倍数 |
-| :----------------------- | :------- | :------- |
-| 无连接池（每次新建连接） | ~7       | 1x       |
-| 连接池已启用             | **~447** | **~52x** |
+| 配置 | 登录 QPS | 提升 |
+| :--- | :--- | :--- |
+| 无连接池（每次新建连接） | ~7 | 1x |
+| 连接池已启用 | **~447** | **~52x** |
 
 ---
 
 ### 3. 异步日志系统
 
-#### 架构
+业务线程只把日志写进内存缓冲区，磁盘 I/O 交给后台线程批量执行，日志语句不会阻塞业务逻辑。
 
 ```
-业务线程                        后台线程
-┌─────┐                        ┌───────────────┐
-│线程1 │──┐   ┌──────────────┐  │               │
-├─────┤  │   │              │  │  LogFile       │
-│线程2 │──╪═══╡ FrontBuffer │══╪══→(滚动/写入)   │
-├─────┤  │   │              │  │               │
-│线程3 │──┘   └──────────────┘  │   AppendFile  │
-└─────┘                        │   (系统调用)   │
-      微秒级写入                  └───────┬───────┘
-                                         ▼
-                                    磁盘文件
+业务线程                       后台线程
+┌──────┐                     ┌─────────────┐
+│线程1  │──┐                  │  LogFile    │
+├──────┤  ├──→ FrontBuffer ─→ │ (滚动/写入)  │ ──→ 磁盘
+│线程2  │──┘   （双缓冲交换）    │  AppendFile │
+└──────┘                     └─────────────┘
 ```
 
-- **异步非阻塞**：业务线程仅将日志写入内存缓冲区，磁盘 I/O 由后台线程批量执行
-- **双缓冲区交换**：前端缓冲区满时与空的后端缓冲区 `std::swap`，零拷贝，锁持有时间极短
-- **文件滚动**：支持按大小（默认 100MB）和按天滚动
-- **文件名格式**：`chatserver.20260415-142536.123456.hostname.1234.log`
+- **双缓冲区交换**：前端缓冲区写满时与后端缓冲区 `std::swap`，锁持有时间极短
+- **文件滚动**：支持按大小（默认 100MB）和按天滚动，文件名带时间戳、主机名、进程号
 - **6 级日志**：TRACE / DEBUG / INFO / WARN / ERROR / FATAL，运行时可调
-
-#### 使用示例
-
-```cpp
-#include "AsynLogging.hpp"
-#include "Logger.hpp"
-
-tulun::AsynLogging g_log("chatserver", 100*1024*1024, 3);
-
-int main() {
-    g_log.start();
-    tulun::Logger::setOutput([](const string& msg) { g_log.append(msg); });
-    tulun::Logger::setFlush([]() { g_log.flush(); });
-    tulun::Logger::setLogLevel(tulun::LOG_LEVEL::INFO);
-
-    LOG_INFO << "Server started on port " << 6000;
-    LOG_ERROR << "Connection timeout from " << "192.168.1.1";
-
-    g_log.stop();
-}
-```
 
 ---
 
 ### 4. 自研压力测试工具与系统化性能分析
 
-手写 C++ 并发压测工具 [`benchmark.cpp`](./test/benchmark/benchmark.cpp)，三阶段测试：
+`test/benchmark/benchmark.cpp`，不依赖 wrk / JMeter 等第三方框架，直接实现协议客户端，分三个阶段：
 
-```
-阶段1: 顺序注册 N 个用户
-  (测量注册 QPS)
+- **注册**：顺序注册 N 个用户，量出单请求延迟基线
+- **并发登录**：每用户一个线程并发登录、各自独立计时，量出登录吞吐；所有线程先就位、统一发令后才开始计时，排除线程创建开销
+- **消息收发**：环形拓扑（用户 i → i+1），每用户独立接收线程做全双工收发，预热后统计吞吐与送达率
 
-阶段2: N 线程并发登录 + 独立计时
-  (测量登录吞吐 + P50/P95/P99 延迟)
-  ┌──────┐ ┌──────┐ ┌──────┐
-  │线程1 │ │线程2 │ │线程3 │ ... 每个线程: send(LOGIN) → recv(ACK) → 计时
-  └──────┘ └──────┘ └──────┘
-
-阶段3: 消息收发验证
-  - 环形发送: 用户 i → 用户 (i+1) % N
-  - 每用户独立接收线程, 全双工
-  - 端到端延迟: 消息内嵌 _ts 时间戳
-  - 预热 → 正式发送 → 统计送达率
-```
-
-
+输出注册 QPS、登录 QPS、消息吞吐与送达率。
 
 ---
 
 ### 5. 应用层心跳检测机制
 
-#### 背景
-
-TCP 连接断开时，服务端并**不总是能立即感知**：
-
-| 场景 | 服务端感知方式 | 延迟 |
-|:---|:---|:---|
-| 客户端正常退出 | 收到 FIN，触发 `onConnection(disconnected)` | 即时 |
-| 客户端进程崩溃 | 操作系统关闭 socket，发送 FIN/RST | 即时 |
-| 客户端断网 / 机器宕机 | **没有任何通知** | **永远不知道** |
-| 网络中间设备断开 | 同上 | 同上 |
-
-操作系统自带的 `TCP Keepalive` 默认 2 小时才发送一次探测，不适用于即时通信场景。因此必须由应用层自行实现心跳检测，**快速发现并清理死连接**。
-
-#### 整体设计
+TCP 在客户端断网、机器宕机这类场景下不会通知服务端；操作系统自带的 `TCP Keepalive` 默认两小时才探测一次，无法及时发现死连接。因此需要在应用层自己做心跳。
 
 ```
-客户端                              服务端
-  │                                  │
-  │  ─── 登录成功 ─────────────────  │
-  │                                  │
-  │  [启动心跳线程]                  │  [启动超时扫描器]
-  │   每 5s 发送心跳                  │   每 5s 扫描所有连接
-  │                                  │
-  │  ─── HEART_BEAT_MSG(id=1) ───   │
-  │                                  │  _connLastHeartBeat[conn] = now()
-  │  ─── HEART_BEAT_MSG(id=1) ───   │
-  │  ...                             │  ...
-  │                                  │
-  │  [客户端断网]                    │
-  │  (无法发送)                      │
-  │                                  │  [00:00  扫描] 正常
-  │                                  │  [00:05  扫描] 正常
-  │                                  │  [00:10  扫描] 超过 10s → 超时!
-  │                                  │    ├─ clientCloseException()
-  │                                  │    │   ├─ _userConnMap.erase
-  │                                  │    │   ├─ redis.unsubscribe
-  │                                  │    │   ├─ user.setState(offline)
-  │                                  │    │   └─ _connLastHeartBeat.erase
-  │                                  │    └─ conn->shutdown()
-  │                                  │
-  │  [网络恢复]                       │
-  │  send(心跳) → 连接已关闭          │
-  │  recv → 0 → 进程退出              │
+客户端                          服务端
+  │ ── 登录成功 ────────────────→ │  启动 5s 周期超时扫描
+  │ ── HEART_BEAT_MSG ─────────→ │  刷新 _connLastHeartBeat[conn]
+  │ ── HEART_BEAT_MSG ─────────→ │
+  │                               │
+  │ ✗ 断网，不再发送                │  连续 10s 未收到心跳
+  │                               │  → 清理在线状态 / Redis 订阅 / DB
+  │                               │  → conn->shutdown()
 ```
-
-#### 客户端实现
-
-**启动时机**：用户登录成功后、进入主菜单前。
-
-**线程模型**：一个后台 detached 线程循环发送，通过 `g_heartBeatRunning` 原子标志控制生命周期。
-
-```cpp
-// 客户端心跳线程
-atomic<bool> g_heartBeatRunning{false};
-
-void startHeartBeatTask(int clientfd, int userid) {
-    g_heartBeatRunning = true;
-    thread([=]() {
-        while (g_heartBeatRunning) {
-            json js;
-            js["msgid"] = HEART_BEAT_MSG;
-            js["id"] = userid;              // 告诉服务端谁还活着
-            if (sendMsg(clientfd, js.dump()) == -1) break;  // 连接断开，自动退出
-            sleep(5);                       // 5 秒间隔
-        }
-    }).detach();
-}
-```
-
-**退出机制**：始终遵循"先停心跳，再关连接"的原则。
-
-```
-loginout（主动注销）:
-  g_heartBeatRunning = false;        // ① 停心跳
-  send(LOGOUT_MSG);                  // ② 发注销请求
-  isMainMenuRunning = false;         // ③ 退出主菜单
-
-quit（退出程序）:
-  g_heartBeatRunning = false;        // ① 停心跳
-  close(clientfd);                   // ② 关连接
-  exit(0);                           // ③ 退出进程
-```
-
-这个顺序保证心跳线程不会在 socket 已关闭后还尝试发送数据。
-
-#### 服务端实现
-
-服务端心跳处理由两个独立任务构成：
-
-**任务一：心跳消息处理器（`heartBeat`）**
-
-每次收到客户端心跳时触发，只做一件事——更新该连接的最后心跳时间。
-
-```cpp
-void ChatService::heartBeat(const TcpConnectionPtr &conn, json &js, Timestamp) {
-    int userid = js["id"].get<int>();
-    {
-        lock_guard<mutex> lock(_heartBeatMutex);
-        _connLastHeartBeat[conn] = Timestamp::now();  // 记录当前时间
-    }
-    // 单向心跳，不给客户端回复
-}
-```
-
-关键点：
-- **key 是连接对象** `TcpConnectionPtr`，不是用户 ID。因为连接断开重建后是新的对象
-- **单向心跳**，服务端不回复。双向确认对即时通信没有额外收益，只会浪费带宽
-
-**任务二：超时扫描定时器（`checkHeartBeatTimeout`）**
-
-由 EventLoop 的 `runEvery` 驱动，每 5 秒执行一次，不占用独立线程。
-
-```cpp
-// 在 main.cpp 中注册
-loop.runEvery(5.0, []() { ChatService::instance()->checkHeartBeatTimeout(); });
-```
-
-扫描逻辑：
-
-```cpp
-void ChatService::checkHeartBeatTimeout() {
-    Timestamp now = Timestamp::now();
-    vector<TcpConnectionPtr> needClose;
-
-    {
-        lock_guard<mutex> lock(_heartBeatMutex);
-        for (auto &pair : _connLastHeartBeat) {
-            // 当前时间 - 最后心跳时间 > 10 秒 → 超时
-            if (timeDifference(now, pair.second) > 10.0) {
-                needClose.push_back(pair.first);
-            }
-        }
-        for (auto &conn : needClose) {
-            _connLastHeartBeat.erase(conn);  // 先删除，防内存泄漏
-        }
-    }
-
-    // 出锁后再关闭连接（避免死锁：clientCloseException 内部需要 _connMutex）
-    for (auto &conn : needClose) {
-        clientCloseException(conn);  // 清理业务数据
-        conn->shutdown();            // 关闭 TCP 连接
-    }
-}
-```
-
-**超时关闭的完整清理链**：
-
-```
-checkHeartBeatTimeout
-  └─ clientCloseException(conn)
-       ├─ _userConnMap.erase                      # ① 删除在线映射
-       ├─ redis.unsubscribe(user.getId())          # ② 取消 Redis 订阅
-       ├─ user.setState("offline")                 # ③ 数据库状态离线
-       │   └─ _userModel.updateState(user)
-       └─ _connLastHeartBeat.erase(conn)           # ④ 删除心跳记录
-  └─ conn->shutdown()                              # ⑤ 关闭 TCP 连接
-       └─ muduo 触发 onConnection(disconnected)    # 确认关闭
-```
-
-#### 关键参数
 
 | 参数 | 值 | 说明 |
-|:---|:---|:---|
-| 客户端心跳间隔 | 5 秒 | 线程 `sleep(5)` |
-| 服务端扫描间隔 | 5 秒 | `loop.runEvery(5.0, ...)` |
+| :--- | :--- | :--- |
+| 客户端心跳间隔 | 5 秒 | 后台线程循环发送 |
+| 服务端扫描间隔 | 5 秒 | `loop.runEvery`，不额外占线程 |
 | 超时阈值 | 10 秒 | 心跳间隔的 2 倍，容忍一次丢包 |
-| 键类型 | `TcpConnectionPtr` | 连接对象指针，非用户 ID |
-| 锁定策略 | 锁内收集 + 锁外关闭 | 避免多锁死锁 |
+| 心跳记录键 | `TcpConnectionPtr` | 用连接对象而非用户 ID，重连后是新对象 |
 
-#### 边界情况处理
+服务端只更新"最后心跳时间"、不回包（单向心跳）；扫描时先在锁内收集超时连接，出锁后再执行关闭与业务清理，避免多锁嵌套死锁。
 
-| 场景 | 处理方式 |
-|:---|:---|
-| 网络短暂闪断（<10s） | 超时阈值内恢复，连接不受影响 |
-| 服务端宕机 | 客户端 `recv` 返回 0，接收线程退出进程 |
-| 客户端进程崩溃 | 操作系统关闭 socket，服务端收到 FIN → `onConnection` |
-| 同一用户重复登录 | 两次独立的 `TcpConnection`，心跳记录互不干扰，旧连接超时后自动清理 |
-
-#### 为什么不用 TCP Keepalive？
-
-| 特性 | TCP Keepalive | 应用层心跳 |
-|:---|:---|:---|
-| 默认探测间隔 | 2 小时 | 5 秒 |
-| 携带业务信息 | 否（无用户 ID） | 是（可携带 userid） |
-| 可配置性 | 需修改系统参数 | 代码层随意调整 |
-| 适用场景 | 长连接保活 | **即时通信心跳检测** |
-
+---
 ---
 
 ## 压测结果
 
-测试环境：`127.0.0.1:6000`，50 用户并发，每用户 100 条消息，Muduo 4 线程
+测试环境：`127.0.0.1:6000`，50 用户并发，每用户 100 条消息，Muduo 4 线程。
 
-### 综合指标
+| 指标 | 值 |
+| :--- | :--- |
+| 注册 QPS | 152（顺序注册，作基准参考） |
+| **登录 QPS** | **447** |
+| **消息送达率** | **100%**（5000/5000） |
 
-| 指标           | 值       | 可信度                   |
-| :------------- | :------- | :----------------------- |
-| 注册 QPS       | 152      | ✅ （顺序执行，基准参考） |
-| **登录 QPS**   | **447**  | **✅ （并发线程实测）**   |
-| 登录 P50 延迟  | 53.9 ms  | ✅                        |
-| 登录 P95 延迟  | 97.0 ms  | ✅                        |
-| 登录 P99 延迟  | 103.4 ms | ✅                        |
-| **消息送达率** | **100%** | **✅ （5000/5000）**      |
-
-### 登录延迟分布
-
-```
-最小:   6.6 ms
-P50:   53.9 ms   ── 一半用户在此以内完成
-P95:   97.0 ms   ── 95% 用户在此以内完成
-P99:  103.4 ms   ── 99% 用户在此以内完成
-最大:  103.4 ms
-```
-
-延迟集中在 50~100ms 区间，主要耗时在 MySQL 认证查询，属于正常范围。连接池启用后，P50 从 ~150ms 降低至 ~54ms。
+登录耗时主要在 MySQL 查询与连接获取，所以连接池对登录吞吐的影响最直接。
 
 ---
 
