@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <mutex>
+#include <condition_variable>
 
 #include <unistd.h>
 #include <sys/socket.h>
@@ -281,16 +282,42 @@ static double phase_login(vector<VirtualUser *> &users)
 
     atomic<int> succ{0}, fail{0};
     LatencyStats lat;
+
+    // 发令枪：线程先全部创建并就位，等主线程统一发令后才发登录请求。
+    // 这样计时窗口内只有"请求 → 响应"，不含线程创建开销，也避免先创建的线程提前起跑。
+    mutex gateMutex;
+    condition_variable gateCv;
+    int ready = 0;
+    bool go = false;
+
+    vector<thread> threads;
+    threads.reserve(users.size());
+    for (auto *u : users)
+        threads.emplace_back([u, &succ, &fail, &lat, &gateMutex, &gateCv, &ready, &go]() {
+            {
+                unique_lock<mutex> lock(gateMutex);
+                ++ready;
+                gateCv.notify_all();
+                gateCv.wait(lock, [&go]() { return go; });  // 等发令
+            }
+            if (u->login()) { succ++; lat.add(u->login_latency_ms); }
+            else fail++;
+        });
+
+    // 等所有线程就位，再统一发令并开始计时
+    {
+        unique_lock<mutex> lock(gateMutex);
+        gateCv.wait(lock, [&ready, &users]() { return ready == static_cast<int>(users.size()); });
+    }
     auto t1 = high_resolution_clock::now();
     {
-        vector<thread> threads;
-        for (auto *u : users)
-            threads.emplace_back([u, &succ, &fail, &lat]() {
-                if (u->login()) { succ++; lat.add(u->login_latency_ms); }
-                else fail++;
-            });
-        for (auto &t : threads) t.join();
+        lock_guard<mutex> lock(gateMutex);
+        go = true;
     }
+    gateCv.notify_all();
+
+    for (auto &t : threads) t.join();
+
     auto t2 = high_resolution_clock::now();
     double sec = duration<double>(t2 - t1).count();
     cout << "  成功: " << succ.load() << "/" << (succ.load() + fail.load()) << endl;
