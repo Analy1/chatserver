@@ -1,6 +1,9 @@
 #include "redis.hpp"
 #include "Logger.hpp"
 #include <iostream>
+#include <poll.h>
+#include <mutex>
+
 using namespace std;
 
 Redis::Redis()
@@ -10,6 +13,12 @@ Redis::Redis()
 
 Redis::~Redis()
 {
+    _running = false; // 1. 通知子线程退出
+
+    if (_observer_thread.joinable()) {
+        _observer_thread.join(); // 3. 等待子线程彻底执行完毕
+    }
+
     if (_publish_context != nullptr)
     {
         redisFree(_publish_context);
@@ -42,9 +51,9 @@ bool Redis::connect()
     }
 
     // 在单独的线程中，监听通道上的事件，有消息给业务层进行上报
-    thread t([&]()
-             { observer_channel_message(); });
-    t.detach();
+    _observer_thread = std::thread([this]() {
+        observer_channel_message();
+    });
 
     // cout << "connect redis-server success!" << endl;
     LOG_INFO << "Redis connected successfully";
@@ -124,30 +133,52 @@ bool Redis::unsubscribe(int channel)
 }
 
 // 在独立线程中接收订阅通道中的消息
+// 订阅连接同时被业务线程用于 SUBSCRIBE/UNSUBSCRIBE，hiredis 连接不是线程安全的，
+// 所以读和写都用 _cmdMutex 串行化；用 poll 先等数据，避免持锁阻塞。
 void Redis::observer_channel_message()
 {
-
-    redisReply *reply = nullptr;
-    while (REDIS_OK == redisGetReply(this->_subcribe_context, (void **)&reply))
+    while (_running)
     {
-        // 订阅收到的消息是一个带三元素的数组
-        /*
-        订阅返回的消息格式是一个数组：[]"message","channel","content"]
-        频道：element[1]
-        内容: element[2]
-        */
+        pollfd pfd{};
+        pfd.fd = _subcribe_context->fd;
+        pfd.events = POLLIN;
+
+        // 如果运行标志被主线程设置为 false，立刻跳出
+        if (!_running) break; 
+
+        // 最多等 100ms，没有消息就继续循环
+        if (poll(&pfd, 1, 100) <= 0)
+        {
+            continue;
+        }
+
+        // 如果 poll 返回了可读事件，但主线程刚好要退出，这里也要再查一次
+        if (!_running) break;
+
+
+        lock_guard<mutex> lock(_cmdMutex);
+
+        // 如果获取到锁了，主线程可能已经释放了 context，需要做个判空防御
+        if (_subcribe_context == nullptr) break;
+
+        redisReply *reply = nullptr;
+        if (redisGetReply(this->_subcribe_context, (void **)&reply) != REDIS_OK)
+        {
+            if (reply != nullptr)
+            {
+                freeReplyObject(reply);
+            }
+            continue;
+        }
+
+        // 订阅消息格式：["message", "频道", "内容"]
         if (reply != nullptr && reply->element[2] != nullptr && reply->element[2]->str != nullptr)
         {
-            LOG_DEBUG << "收到Redis订阅消息, 通道channel=" << reply->element[1]->str;
-            // 给业务层上报通道上发生的消息
             _notify_message_handler(atoi(reply->element[1]->str), reply->element[2]->str);
         }
 
         freeReplyObject(reply);
     }
-
-    // cerr << ">>>>>>>>>>>>> observer_channel_message quit <<<<<<<<<<<<<" << endl;
-    LOG_ERROR << "Redis observer channel message loop exited!";
 }
 
 void Redis::init_notify_handler(function<void(int, string)> fn)
